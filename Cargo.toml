@@ -35,6 +35,7 @@ urlencoding = "2"
 [dev-dependencies]
 anyhow = "1"
 clap = { version = "4", features = ["derive", "env"] }
+futures-util = "0.3"
 qr2term = "0.3"
 tokio = { version = "1", features = ["full", "test-util"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
@@ -43,3 +44,7 @@ tempfile = "3"
 [[example]]
 name = "echo_bot"
 path = "examples/echo_bot.rs"
+
+[[example]]
+name = "e2e_test"
+path = "examples/e2e_test.rs"

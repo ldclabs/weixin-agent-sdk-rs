@@ -28,8 +28,9 @@ impl MessageHandler for EchoBot {
     }
 
     async fn on_sync_buf_updated(&self, sync_buf: &str) -> Result<()> {
-        let path = self.state_dir.join("sync_buf.json");
-        tokio::fs::write(&path, sync_buf).await?;
+        if let Err(e) = common::save_sync_buf(&self.state_dir, sync_buf).await {
+            tracing::error!(error = %e, "failed to save sync_buf");
+        }
         Ok(())
     }
 

@@ -38,6 +38,7 @@ pub fn context_tokens_path(dir: &Path) -> PathBuf {
 // ── Token resolution ────────────────────────────────────────────────
 
 /// Resolve bot token: CLI arg / env > saved file > QR login.
+#[allow(dead_code)]
 pub async fn resolve_token(args: &BotArgs) -> anyhow::Result<String> {
     if let Some(t) = &args.token {
         return Ok(t.clone());
@@ -53,13 +54,18 @@ pub async fn resolve_token(args: &BotArgs) -> anyhow::Result<String> {
     }
 
     tracing::info!("no token found, starting QR login...");
-    qr_login(&args.state_dir, args.base_url.as_deref()).await
+    let (token, _bot_id) = qr_login(&args.state_dir, args.base_url.as_deref()).await?;
+    Ok(token)
 }
 
 // ── QR login ────────────────────────────────────────────────────────
 
 /// Interactive QR login: display QR in terminal, poll until confirmed, save token.
-async fn qr_login(state_dir: &Path, base_url: Option<&str>) -> anyhow::Result<String> {
+/// Returns (token, ilink_bot_id).
+pub async fn qr_login(
+    state_dir: &Path,
+    base_url: Option<&str>,
+) -> anyhow::Result<(String, String)> {
     let mut builder = WeixinConfig::builder().token("");
     if let Some(url) = base_url {
         builder = builder.base_url(url);
@@ -81,7 +87,7 @@ async fn qr_login(state_dir: &Path, base_url: Option<&str>) -> anyhow::Result<St
             } => {
                 tracing::info!(bot_id = %ilink_bot_id, user_id = %ilink_user_id, base_url = %base_url, "login confirmed");
                 tokio::fs::write(token_path(state_dir), &bot_token).await?;
-                return Ok(bot_token);
+                return Ok((bot_token, ilink_bot_id));
             }
             LoginStatus::Scanned => {
                 tracing::info!("scanned, waiting for confirmation...");
@@ -113,9 +119,20 @@ fn print_qr(content: &str) {
 // ── State persistence helpers ───────────────────────────────────────
 
 pub async fn load_sync_buf(state_dir: &Path) -> Option<String> {
-    tokio::fs::read_to_string(sync_buf_path(state_dir))
+    let data = tokio::fs::read_to_string(sync_buf_path(state_dir))
         .await
-        .ok()
+        .ok()?;
+    let parsed: serde_json::Value = serde_json::from_str(&data).ok()?;
+    parsed
+        .get("get_updates_buf")
+        .and_then(|v| v.as_str())
+        .map(String::from)
+}
+
+pub async fn save_sync_buf(state_dir: &Path, sync_buf: &str) -> anyhow::Result<()> {
+    let json = serde_json::json!({ "get_updates_buf": sync_buf });
+    tokio::fs::write(sync_buf_path(state_dir), json.to_string()).await?;
+    Ok(())
 }
 
 pub async fn load_context_tokens(state_dir: &Path) -> HashMap<String, String> {
@@ -125,6 +142,7 @@ pub async fn load_context_tokens(state_dir: &Path) -> HashMap<String, String> {
     serde_json::from_str(&data).unwrap_or_default()
 }
 
+#[allow(dead_code)]
 pub async fn save_context_tokens(
     state_dir: &Path,
     tokens: &HashMap<String, String>,
